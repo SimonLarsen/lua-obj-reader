@@ -39,18 +39,17 @@ function obj_reader.read(path)
 
 	local get_lines
 
-	if love then
-		get_lines = love.filesystem.lines
-	else
-		get_lines = io.lines
-	end
+	if love then get_lines = love.filesystem.lines
+	else get_lines = io.lines end
 
 	local obj = {
 		v = {},
 		vt = {},
 		vn = {},
-		f= {},
+		f = {},
 	}
+
+	usemtl = nil
 
 	for line in get_lines(path) do
 		local parts = string_split(line, "%s+")
@@ -59,8 +58,19 @@ function obj_reader.read(path)
 			local mtl_path_parts = string_split(path, "/")
 			mtl_path_parts[#mtl_path_parts] = parts[2]
 			local mtl_path = table.concat(mtl_path_parts, "/")
-			obj.materials = obj_reader.read_materials(table)
+			obj.materials = obj_reader.read_materials(mtl_path)
 
+		elseif parts[1] == "usemtl" then
+			usemtl = nil
+			if parts[2] ~= "None" then
+				assert(obj.materials ~= nil, "No materials found.")
+				for i=1, #obj.materials do
+					if obj.materials[i].name == parts[2] then
+						usemtl = i
+					end
+				end
+				assert(usemtl ~= nil, "Material \"" .. parts[2] .. "\" not defined.")
+			end
 		elseif parts[1] == "v" then
 			local v = {
 				x = tonumber(parts[2]),
@@ -98,6 +108,8 @@ function obj_reader.read(path)
 
 				table.insert(f, v)
 			end
+
+			f.material = usemtl
 			table.insert(obj.f, f)
 		end
 	end
@@ -106,8 +118,44 @@ function obj_reader.read(path)
 end
 
 function obj_reader.read_materials(path)
-	if love then get_line = love.filesystem.lines
+	if love then get_lines = love.filesystem.lines
 	else get_lines = io.lines end
+
+	local out = {}
+	local mtl
+
+	for line in get_lines(path) do
+		local parts = string_split(line, "%s+")
+
+		if parts[1] == "newmtl" then
+			if mtl ~= nil then
+				table.insert(out, mtl)
+			end
+			mtl = {}
+			mtl.name = parts[2]
+		elseif parts[1] == "Kd"
+		or parts[1] == "Ns"
+		or parts[1] == "Ka"
+		or parts[1] == "Kd"
+		or parts[1] == "Ks"
+		or parts[1] == "Ke"
+		or parts[1] == "Ni"
+		or parts[1] == "d" then
+			local v = {}
+			for i=2, #parts do
+				table.insert(v, tonumber(parts[i]))
+			end
+			mtl[parts[1]] = v
+		elseif parts[1] == "illum" then
+			mtl.illum = tonumber(parts[2])
+		end
+	end
+
+	if mtl ~= nil then
+		table.insert(out, mtl)
+	end
+
+	return out
 end
 
 return obj_reader
